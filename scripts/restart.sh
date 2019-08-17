@@ -2,5 +2,5 @@
 
 set -e
 
-cargo run -- purge-chain --dev -y
-cargo run -- --dev
+cargo run --release -- purge-chain --dev -y
+cargo run --release -- --dev

@@ -45,7 +45,12 @@ impl Alternative {
 				|| testnet_genesis(vec![
 					authority_key("Alice")
 				], vec![
-					account_key("Alice")
+					account_key("Alice"),
+					account_key("Bob"),
+					account_key("Charlie"),
+					account_key("Dave"),
+					account_key("Eve"),
+					account_key("Ferdie"),
 				],
 					account_key("Alice")
 				),
@@ -102,7 +107,7 @@ fn testnet_genesis(initial_authorities: Vec<AuraId>, endowed_accounts: Vec<Accou
 			ids: endowed_accounts.clone(),
 		}),
 		balances: Some(BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k|(k, 1 << 60)).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k|(k, 10u128.pow(20))).collect(),
 			vesting: vec![],
 		}),
 		sudo: Some(SudoConfig {
