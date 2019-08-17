@@ -1,9 +1,8 @@
-use primitives::{sr25519, Pair};
-use kusama_kitties_runtime::{
-	AccountId, GenesisConfig, AuraConfig, BalancesConfig,
-	SudoConfig, IndicesConfig, SystemConfig, WASM_BINARY, AuraId
-};
 use aura_primitives::sr25519::AuthorityPair as AuraPair;
+use kusama_kitties_runtime::{
+	AccountId, AuraConfig, AuraId, BalancesConfig, GenesisConfig, IndicesConfig, SudoConfig, SystemConfig, WASM_BINARY,
+};
+use primitives::{sr25519, Pair};
 use substrate_service;
 
 // Note this is the URL for the telemetry server
@@ -42,45 +41,48 @@ impl Alternative {
 			Alternative::Development => ChainSpec::from_genesis(
 				"Development",
 				"dev",
-				|| testnet_genesis(vec![
-					authority_key("Alice")
-				], vec![
-					account_key("Alice"),
-					account_key("Bob"),
-					account_key("Charlie"),
-					account_key("Dave"),
-					account_key("Eve"),
-					account_key("Ferdie"),
-				],
-					account_key("Alice")
-				),
+				|| {
+					testnet_genesis(
+						vec![authority_key("Alice")],
+						vec![
+							account_key("Alice"),
+							account_key("Bob"),
+							account_key("Charlie"),
+							account_key("Dave"),
+							account_key("Eve"),
+							account_key("Ferdie"),
+						],
+						account_key("Alice"),
+					)
+				},
 				vec![],
 				None,
 				None,
 				None,
-				None
+				None,
 			),
 			Alternative::LocalTestnet => ChainSpec::from_genesis(
 				"Local Testnet",
 				"local_testnet",
-				|| testnet_genesis(vec![
-					authority_key("Alice"),
-					authority_key("Bob"),
-				], vec![
-					account_key("Alice"),
-					account_key("Bob"),
-					account_key("Charlie"),
-					account_key("Dave"),
-					account_key("Eve"),
-					account_key("Ferdie"),
-				],
-					account_key("Alice"),
-				),
+				|| {
+					testnet_genesis(
+						vec![authority_key("Alice"), authority_key("Bob")],
+						vec![
+							account_key("Alice"),
+							account_key("Bob"),
+							account_key("Charlie"),
+							account_key("Dave"),
+							account_key("Eve"),
+							account_key("Ferdie"),
+						],
+						account_key("Alice"),
+					)
+				},
 				vec![],
 				None,
 				None,
 				None,
-				None
+				None,
 			),
 		})
 	}
@@ -94,7 +96,11 @@ impl Alternative {
 	}
 }
 
-fn testnet_genesis(initial_authorities: Vec<AuraId>, endowed_accounts: Vec<AccountId>, root_key: AccountId) -> GenesisConfig {
+fn testnet_genesis(
+	initial_authorities: Vec<AuraId>,
+	endowed_accounts: Vec<AccountId>,
+	root_key: AccountId,
+) -> GenesisConfig {
 	GenesisConfig {
 		system: Some(SystemConfig {
 			code: WASM_BINARY.to_vec(),
@@ -107,11 +113,9 @@ fn testnet_genesis(initial_authorities: Vec<AuraId>, endowed_accounts: Vec<Accou
 			ids: endowed_accounts.clone(),
 		}),
 		balances: Some(BalancesConfig {
-			balances: endowed_accounts.iter().cloned().map(|k|(k, 10u128.pow(20))).collect(),
+			balances: endowed_accounts.iter().cloned().map(|k| (k, 10u128.pow(20))).collect(),
 			vesting: vec![],
 		}),
-		sudo: Some(SudoConfig {
-			key: root_key,
-		}),
+		sudo: Some(SudoConfig { key: root_key }),
 	}
 }

@@ -1,16 +1,17 @@
-use crate::service;
-use futures::{future, Future, sync::oneshot};
-use std::cell::RefCell;
-use tokio::runtime::Runtime;
-pub use substrate_cli::{VersionInfo, IntoExit, error};
-use substrate_cli::{informant, parse_and_prepare, ParseAndPrepare, NoCustom};
-use substrate_service::{ServiceFactory, Roles as ServiceRoles};
 use crate::chain_spec;
-use std::ops::Deref;
+use crate::service;
+use futures::{future, sync::oneshot, Future};
 use log::info;
+use std::cell::RefCell;
+use std::ops::Deref;
+pub use substrate_cli::{error, IntoExit, VersionInfo};
+use substrate_cli::{informant, parse_and_prepare, NoCustom, ParseAndPrepare};
+use substrate_service::{Roles as ServiceRoles, ServiceFactory};
+use tokio::runtime::Runtime;
 
 /// Parse command line arguments into service configuration.
-pub fn run<I, T, E>(args: I, exit: E, version: VersionInfo) -> error::Result<()> where
+pub fn run<I, T, E>(args: I, exit: E, version: VersionInfo) -> error::Result<()>
+where
 	I: IntoIterator<Item = T>,
 	T: Into<std::ffi::OsString> + Clone,
 	E: IntoExit,
@@ -27,22 +28,23 @@ pub fn run<I, T, E>(args: I, exit: E, version: VersionInfo) -> error::Result<()>
 			match config.roles {
 				ServiceRoles::LIGHT => run_until_exit(
 					runtime,
-				 	service::Factory::new_light(config).map_err(|e| format!("{:?}", e))?,
-					exit
+					service::Factory::new_light(config).map_err(|e| format!("{:?}", e))?,
+					exit,
 				),
 				_ => run_until_exit(
 					runtime,
 					service::Factory::new_full(config).map_err(|e| format!("{:?}", e))?,
-					exit
+					exit,
 				),
-			}.map_err(|e| format!("{:?}", e))
+			}
+			.map_err(|e| format!("{:?}", e))
 		}),
 		ParseAndPrepare::BuildSpec(cmd) => cmd.run(load_spec),
 		ParseAndPrepare::ExportBlocks(cmd) => cmd.run::<service::Factory, _, _>(load_spec, exit),
 		ParseAndPrepare::ImportBlocks(cmd) => cmd.run::<service::Factory, _, _>(load_spec, exit),
 		ParseAndPrepare::PurgeChain(cmd) => cmd.run(load_spec),
 		ParseAndPrepare::RevertChain(cmd) => cmd.run::<service::Factory, _>(load_spec),
-		ParseAndPrepare::CustomCommand(_) => Ok(())
+		ParseAndPrepare::CustomCommand(_) => Ok(()),
 	}?;
 
 	Ok(())
@@ -55,12 +57,9 @@ fn load_spec(id: &str) -> Result<Option<chain_spec::ChainSpec>, String> {
 	})
 }
 
-fn run_until_exit<T, C, E>(
-	mut runtime: Runtime,
-	service: T,
-	e: E,
-) -> error::Result<()> where
-	T: Deref<Target=substrate_service::Service<C>>,
+fn run_until_exit<T, C, E>(mut runtime: Runtime, service: T, e: E) -> error::Result<()>
+where
+	T: Deref<Target = substrate_service::Service<C>>,
 	T: Future<Item = (), Error = substrate_service::error::Error> + Send + 'static,
 	C: substrate_service::Components,
 	E: IntoExit,
@@ -75,7 +74,9 @@ fn run_until_exit<T, C, E>(
 	let _telemetry = service.telemetry();
 
 	let service_res = {
-		let exit = e.into_exit().map_err(|_| error::Error::Other("Exit future failed.".into()));
+		let exit = e
+			.into_exit()
+			.map_err(|_| error::Error::Other("Exit future failed.".into()));
 		let service = service.map_err(|err| error::Error::Service(err));
 		let select = service.select(exit).map(|_| ()).map_err(|(err, _)| err);
 		runtime.block_on(select)
@@ -99,10 +100,15 @@ impl IntoExit for Exit {
 
 		let exit_send_cell = RefCell::new(Some(exit_send));
 		ctrlc::set_handler(move || {
-			if let Some(exit_send) = exit_send_cell.try_borrow_mut().expect("signal handler not reentrant; qed").take() {
+			if let Some(exit_send) = exit_send_cell
+				.try_borrow_mut()
+				.expect("signal handler not reentrant; qed")
+				.take()
+			{
 				exit_send.send(()).expect("Error sending exit notification");
 			}
-		}).expect("Error setting Ctrl-C handler");
+		})
+		.expect("Error setting Ctrl-C handler");
 
 		exit.map_err(drop)
 	}

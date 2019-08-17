@@ -1,6 +1,6 @@
-use support::{StorageMap, Parameter};
+use codec::{Decode, Encode};
 use sr_primitives::traits::Member;
-use codec::{Encode, Decode};
+use support::{Parameter, StorageMap};
 
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode)]
@@ -11,10 +11,11 @@ pub struct LinkedItem<Item> {
 
 pub struct LinkedList<Storage, Key, Item>(rstd::marker::PhantomData<(Storage, Key, Item)>);
 
-impl<Storage, Key, Value> LinkedList<Storage, Key, Value> where
-  Value: Parameter + Member + Copy,
-  Key: Parameter,
-  Storage: StorageMap<(Key, Option<Value>), LinkedItem<Value>, Query = Option<LinkedItem<Value>>>,
+impl<Storage, Key, Value> LinkedList<Storage, Key, Value>
+where
+	Value: Parameter + Member + Copy,
+	Key: Parameter,
+	Storage: StorageMap<(Key, Option<Value>), LinkedItem<Value>, Query = Option<LinkedItem<Value>>>,
 {
 	fn read_head(key: &Key) -> LinkedItem<Value> {
 		Self::read(key, None)
@@ -25,10 +26,7 @@ impl<Storage, Key, Value> LinkedList<Storage, Key, Value> where
 	}
 
 	fn read(key: &Key, value: Option<Value>) -> LinkedItem<Value> {
-		Storage::get(&(key.clone(), value)).unwrap_or_else(|| LinkedItem {
-			prev: None,
-			next: None,
-		})
+		Storage::get(&(key.clone(), value)).unwrap_or_else(|| LinkedItem { prev: None, next: None })
 	}
 
 	fn write(key: &Key, value: Option<Value>, item: LinkedItem<Value>) {

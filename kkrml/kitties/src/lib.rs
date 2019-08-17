@@ -1,18 +1,14 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use support::{
-	decl_module, decl_storage, decl_event, ensure, StorageValue, StorageMap,
-	Parameter, traits::Currency
-};
-use sr_primitives::traits::{SimpleArithmetic, Bounded, One, Member};
-use codec::{Encode, Decode};
-use runtime_io::blake2_128;
-use system::ensure_signed;
+use codec::{Decode, Encode};
 use rstd::result;
+use runtime_io::blake2_128;
+use sr_primitives::traits::{Bounded, Member, One, SimpleArithmetic};
+use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, Parameter, StorageMap, StorageValue};
+use system::ensure_signed;
 
 mod linked_item;
-use linked_item::{LinkedList, LinkedItem};
-
+use linked_item::{LinkedItem, LinkedList};
 
 pub trait Trait: system::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
@@ -96,7 +92,7 @@ decl_module! {
 			let sender = ensure_signed(origin)?;
 
 			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can transfer kitty");
-			
+
 			Self::do_transfer(&sender, &to, kitty_id);
 
 			Self::deposit_event(RawEvent::Transferred(sender, to, kitty_id));
@@ -114,7 +110,7 @@ decl_module! {
 			} else {
 				<KittyPrices<T>>::remove(kitty_id);
 			}
-			
+
 			Self::deposit_event(RawEvent::Ask(sender, kitty_id, price));
 		}
 
@@ -149,7 +145,12 @@ fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
 
 impl<T: Trait> Module<T> {
 	fn random_value(sender: &T::AccountId) -> [u8; 16] {
-		let payload = (<system::Module<T>>::random_seed(), sender, <system::Module<T>>::extrinsic_index(), <system::Module<T>>::block_number());
+		let payload = (
+			<system::Module<T>>::random_seed(),
+			sender,
+			<system::Module<T>>::extrinsic_index(),
+			<system::Module<T>>::block_number(),
+		);
 		payload.using_encoded(blake2_128)
 	}
 
@@ -174,15 +175,29 @@ impl<T: Trait> Module<T> {
 		Self::insert_owned_kitty(owner, kitty_id);
 	}
 
-	fn do_breed(sender: &T::AccountId, kitty_id_1: T::KittyIndex, kitty_id_2: T::KittyIndex) -> result::Result<T::KittyIndex, &'static str> {
+	fn do_breed(
+		sender: &T::AccountId,
+		kitty_id_1: T::KittyIndex,
+		kitty_id_2: T::KittyIndex,
+	) -> result::Result<T::KittyIndex, &'static str> {
 		let kitty1 = Self::kitty(kitty_id_1);
 		let kitty2 = Self::kitty(kitty_id_2);
 
 		ensure!(kitty1.is_some(), "Invalid kitty_id_1");
 		ensure!(kitty2.is_some(), "Invalid kitty_id_2");
 		ensure!(kitty_id_1 != kitty_id_2, "Needs different parent");
-		ensure!(Self::kitty_owner(&kitty_id_1).map(|owner| owner == *sender).unwrap_or(false), "Not onwer of kitty1");
-		ensure!(Self::kitty_owner(&kitty_id_2).map(|owner| owner == *sender).unwrap_or(false), "Not owner of kitty2");
+		ensure!(
+			Self::kitty_owner(&kitty_id_1)
+				.map(|owner| owner == *sender)
+				.unwrap_or(false),
+			"Not onwer of kitty1"
+		);
+		ensure!(
+			Self::kitty_owner(&kitty_id_2)
+				.map(|owner| owner == *sender)
+				.unwrap_or(false),
+			"Not owner of kitty2"
+		);
 
 		let kitty_id = Self::next_kitty_id()?;
 
@@ -203,7 +218,7 @@ impl<T: Trait> Module<T> {
 		Ok(kitty_id)
 	}
 
-	fn do_transfer(from: &T::AccountId, to: &T::AccountId, kitty_id: T::KittyIndex)  {
+	fn do_transfer(from: &T::AccountId, to: &T::AccountId, kitty_id: T::KittyIndex) {
 		<OwnedKittiesList<T>>::remove(&from, kitty_id);
 		<OwnedKittiesList<T>>::append(&to, kitty_id);
 		<KittyOwners<T>>::insert(kitty_id, to);
@@ -215,14 +230,14 @@ impl<T: Trait> Module<T> {
 mod tests {
 	use super::*;
 
+	use primitives::{Blake2Hasher, H256};
 	use runtime_io::with_externalities;
-	use primitives::{H256, Blake2Hasher};
-	use support::{impl_outer_origin};
 	use sr_primitives::{
-		BuildStorage,
+		testing::{Digest, DigestItem, Header},
 		traits::{BlakeTwo256, IdentityLookup},
-		testing::{Digest, DigestItem, Header}
+		BuildStorage,
 	};
+	use support::impl_outer_origin;
 
 	impl_outer_origin! {
 		pub enum Origin for Test {}
@@ -267,7 +282,11 @@ mod tests {
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
 	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default().build_storage().unwrap().0.into()
+		system::GenesisConfig::<Test>::default()
+			.build_storage()
+			.unwrap()
+			.0
+			.into()
 	}
 
 	#[test]
@@ -275,54 +294,78 @@ mod tests {
 		with_externalities(&mut new_test_ext(), || {
 			OwnedKittiesList::<Test>::append(&0, 1);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: Some(1),
-				next: Some(1),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(1),
+					next: Some(1),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(1))),
+				Some(KittyLinkedItem::<Test> { prev: None, next: None })
+			);
 
 			OwnedKittiesList::<Test>::append(&0, 2);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: Some(2),
-				next: Some(1),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(2),
+					next: Some(1),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: Some(2),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(1))),
+				Some(KittyLinkedItem::<Test> {
+					prev: None,
+					next: Some(2),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem::<Test> {
-				prev: Some(1),
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(2))),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(1),
+					next: None,
+				})
+			);
 
 			OwnedKittiesList::<Test>::append(&0, 3);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: Some(3),
-				next: Some(1),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(3),
+					next: Some(1),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: Some(2),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(1))),
+				Some(KittyLinkedItem::<Test> {
+					prev: None,
+					next: Some(2),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), Some(KittyLinkedItem::<Test> {
-				prev: Some(1),
-				next: Some(3),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(2))),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(1),
+					next: Some(3),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem::<Test> {
-				prev: Some(2),
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(3))),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(2),
+					next: None,
+				})
+			);
 		});
 	}
 
@@ -335,45 +378,57 @@ mod tests {
 
 			OwnedKittiesList::<Test>::remove(&0, 2);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: Some(3),
-				next: Some(1),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(3),
+					next: Some(1),
+				})
+			);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: Some(3),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(1))),
+				Some(KittyLinkedItem::<Test> {
+					prev: None,
+					next: Some(3),
+				})
+			);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem::<Test> {
-				prev: Some(1),
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(3))),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(1),
+					next: None,
+				})
+			);
 
 			OwnedKittiesList::<Test>::remove(&0, 1);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: Some(3),
-				next: Some(3),
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> {
+					prev: Some(3),
+					next: Some(3),
+				})
+			);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, Some(2))), None);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, Some(3))), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, Some(3))),
+				Some(KittyLinkedItem::<Test> { prev: None, next: None })
+			);
 
 			OwnedKittiesList::<Test>::remove(&0, 3);
 
-			assert_eq!(OwnedKittiesTest::get(&(0, None)), Some(KittyLinkedItem::<Test> {
-				prev: None,
-				next: None,
-			}));
+			assert_eq!(
+				OwnedKittiesTest::get(&(0, None)),
+				Some(KittyLinkedItem::<Test> { prev: None, next: None })
+			);
 
 			assert_eq!(OwnedKittiesTest::get(&(0, Some(1))), None);
 
@@ -383,4 +438,3 @@ mod tests {
 		});
 	}
 }
-

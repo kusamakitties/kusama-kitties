@@ -2,23 +2,22 @@
 
 #![warn(unused_extern_crates)]
 
-use std::sync::Arc;
-use transaction_pool::{self, txpool::{Pool as TransactionPool}};
-use kusama_kitties_runtime::{self, GenesisConfig, opaque::Block, RuntimeApi, WASM_BINARY};
-use substrate_service::{
-	FactoryFullConfiguration, LightComponents, FullComponents, FullBackend,
-	FullClient, LightClient, LightBackend, FullExecutor, LightExecutor,
-	error::{Error as ServiceError},
-};
+use aura_primitives::sr25519::AuthorityPair as AuraAuthorityPair;
 use basic_authorship::ProposerFactory;
 use consensus::{import_queue, start_aura, AuraImportQueue, SlotDuration};
 use futures::prelude::*;
-use substrate_client::{self as client, LongestChain};
 use inherents::InherentDataProviders;
+use kusama_kitties_runtime::{self, opaque::Block, GenesisConfig, RuntimeApi, WASM_BINARY};
 use network::{config::DummyFinalityProofRequestBuilder, construct_simple_protocol};
+use std::sync::Arc;
+use substrate_client::{self as client, LongestChain};
 use substrate_executor::native_executor_instance;
 use substrate_service::construct_service_factory;
-use aura_primitives::sr25519::AuthorityPair as AuraAuthorityPair;
+use substrate_service::{
+	error::Error as ServiceError, FactoryFullConfiguration, FullBackend, FullClient, FullComponents, FullExecutor,
+	LightBackend, LightClient, LightComponents, LightExecutor,
+};
+use transaction_pool::{self, txpool::Pool as TransactionPool};
 
 pub use substrate_executor::NativeExecutor;
 // Our native executor instance.
