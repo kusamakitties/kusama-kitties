@@ -233,11 +233,11 @@ mod tests {
 	use primitives::{Blake2Hasher, H256};
 	use runtime_io::with_externalities;
 	use sr_primitives::{
-		testing::{Digest, DigestItem, Header},
+		testing::Header,
 		traits::{BlakeTwo256, IdentityLookup},
-		BuildStorage,
+		Perbill,
 	};
-	use support::impl_outer_origin;
+	use support::{impl_outer_origin, parameter_types};
 
 	impl_outer_origin! {
 		pub enum Origin for Test {}
@@ -248,45 +248,62 @@ mod tests {
 	// configuration traits of modules we want to use.
 	#[derive(Clone, Eq, PartialEq, Debug)]
 	pub struct Test;
+	parameter_types! {
+		pub const BlockHashCount: u64 = 250;
+		pub const MaximumBlockWeight: u32 = 1024;
+		pub const MaximumBlockLength: u32 = 2 * 1024;
+		pub const AvailableBlockRatio: Perbill = Perbill::one();
+	}
 	impl system::Trait for Test {
 		type Origin = Origin;
 		type Index = u64;
 		type BlockNumber = u64;
+		type Call = ();
 		type Hash = H256;
 		type Hashing = BlakeTwo256;
-		type Digest = Digest;
 		type AccountId = u64;
-		type Lookup = IdentityLookup<Self::AccountId>;
+		type Lookup = IdentityLookup<u64>;
 		type Header = Header;
 		type Event = ();
-		type Log = DigestItem;
+		type WeightMultiplierUpdate = ();
+		type MaximumBlockWeight = MaximumBlockWeight;
+		type MaximumBlockLength = MaximumBlockLength;
+		type AvailableBlockRatio = AvailableBlockRatio;
+		type BlockHashCount = BlockHashCount;
+	}
+	parameter_types! {
+		pub const ExistentialDeposit: u64 = 0;
+		pub const TransferFee: u64 = 0;
+		pub const CreationFee: u64 = 0;
+		pub const TransactionBaseFee: u64 = 0;
+		pub const TransactionByteFee: u64 = 0;
 	}
 	impl balances::Trait for Test {
-		type Balance = u32;
+		type Balance = u64;
 		type OnFreeBalanceZero = ();
 		type OnNewAccount = ();
 		type Event = ();
-
 		type TransactionPayment = ();
-		type DustRemoval = ();
 		type TransferPayment = ();
+		type DustRemoval = ();
+		type ExistentialDeposit = ExistentialDeposit;
+		type TransferFee = TransferFee;
+		type CreationFee = CreationFee;
+		type TransactionBaseFee = TransactionBaseFee;
+		type TransactionByteFee = TransactionByteFee;
+		type WeightToFee = ();
 	}
 	impl Trait for Test {
 		type KittyIndex = u32;
 		type Currency = balances::Module<Test>;
 		type Event = ();
 	}
-	type KittyModule = Module<Test>;
 	type OwnedKittiesTest = OwnedKitties<Test>;
 
 	// This function basically just builds a genesis storage key/value store according to
 	// our desired mockup.
-	fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
-		system::GenesisConfig::<Test>::default()
-			.build_storage()
-			.unwrap()
-			.0
-			.into()
+	pub fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
+		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
 	}
 
 	#[test]

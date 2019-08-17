@@ -14,8 +14,8 @@ runtime_io = { package = "sr-io", git = "https://github.com/paritytech/substrate
 rstd = { package = "sr-std", git = "https://github.com/paritytech/substrate.git", default-features = false }
 
 [dev-dependencies]
-primitives = { package = "substrate-primitives",  git = "https://github.com/paritytech/substrate.git" }
-
+primitives = { package = "substrate-primitives", git = "https://github.com/paritytech/substrate.git" }
+balances = { package = "srml-balances", git = "https://github.com/paritytech/substrate.git" }
 
 [features]
 default = ["std"]
