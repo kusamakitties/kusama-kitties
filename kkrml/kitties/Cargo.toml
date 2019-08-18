@@ -13,6 +13,8 @@ system = { package = "srml-system", git = "https://github.com/paritytech/substra
 timestamp = { package = "srml-timestamp", git = "https://github.com/paritytech/substrate.git", default-features = false }
 runtime_io = { package = "sr-io", git = "https://github.com/paritytech/substrate.git", default-features = false }
 rstd = { package = "sr-std", git = "https://github.com/paritytech/substrate.git", default-features = false }
+rand = { version = "0.7", default-features = false }
+rand_chacha = { version = "0.2", default-features = false }
 
 [dev-dependencies]
 primitives = { package = "substrate-primitives", git = "https://github.com/paritytech/substrate.git" }
@@ -29,4 +31,6 @@ std = [
 	"timestamp/std",
 	"runtime_io/std",
 	"rstd/std",
+	"rand/std",
+	"rand_chacha/std",
 ]

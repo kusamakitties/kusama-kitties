@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
-use codec::Encode;
 use rstd::result;
-use runtime_io::blake2_128;
 use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, StorageMap, StorageValue};
 use system::ensure_signed;
+use rstd::prelude::*;
+use rand::SeedableRng;
 
 mod linked_item;
 use linked_item::{LinkedItem, LinkedList};
@@ -12,16 +12,23 @@ use linked_item::{LinkedItem, LinkedList};
 mod kitty;
 use kitty::Kitty;
 
+mod random;
+use random::{random_seed, Rng};
+
 pub trait Trait: timestamp::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId>;
 }
 
-type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+// type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 type KittyIndex = u32;
 
 type KittyLinkedItem = LinkedItem<KittyIndex>;
 type OwnedKittiesList<T> = LinkedList<OwnedKitties<T>, <T as system::Trait>::AccountId, KittyIndex>;
+
+fn rng<T: Trait>(sender: &T::AccountId) -> Rng {
+	Rng::from_seed(random_seed::<T, _>((b"kty", sender)))
+}
 
 decl_storage! {
 	trait Store for Module<T: Trait> as Kitties {
@@ -70,18 +77,18 @@ decl_module! {
 			let sender = ensure_signed(origin)?;
 			let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
 
-			// Generate a random 128bit value
-			let dna = Self::random_value(&sender);
-
 			// Create and store kitty
-			let kitty = Kitty::new();
+			let kitty = Kitty::new(&mut rng::<T>(&sender));
 			Self::insert_kitty(&sender, kitty_id, kitty);
 
 			Self::deposit_event(RawEvent::Captured(sender, kitty_id));
 		}
 
 		pub fn update_name(origin, kitty_id: KittyIndex, name: Vec<u8>) {
-
+			let sender = ensure_signed(origin)?;
+			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can update kitty name");
+			ensure!(name.len() < 50, "Kitty name cannot be more than 50 bytes");
+			KittiesName::insert(kitty_id, name);
 		}
 
 		/// Breed kitties
@@ -106,21 +113,7 @@ decl_module! {
 	}
 }
 
-fn combine_dna(dna1: u8, dna2: u8, selector: u8) -> u8 {
-	((selector & dna1) | (!selector & dna2))
-}
-
 impl<T: Trait> Module<T> {
-	fn random_value(sender: &T::AccountId) -> [u8; 16] {
-		let payload = (
-			<system::Module<T>>::random_seed(),
-			sender,
-			<system::Module<T>>::extrinsic_index(),
-			<system::Module<T>>::block_number(),
-		);
-		payload.using_encoded(blake2_128)
-	}
-
 	fn insert_owned_kitty(owner: &T::AccountId, kitty_id: KittyIndex) {
 		<OwnedKittiesList<T>>::append(owner, kitty_id);
 	}
@@ -177,7 +170,7 @@ impl<T: Trait> Module<T> {
 		// 	new_dna[i] = combine_dna(kitty1_dna[i], kitty2_dna[i], selector[i]);
 		// }
 
-		Self::insert_kitty(sender, kitty_id, Kitty::new());
+		Self::insert_kitty(sender, kitty_id, Kitty::new(&mut rng::<T>(sender)));
 
 		Ok(kitty_id)
 	}
