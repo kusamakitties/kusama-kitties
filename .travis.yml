@@ -2,6 +2,7 @@ language: rust
 rust: nightly-2019-08-15
 cache: cargo
 before_script:
+    - ./scripts/init.sh
     - rustup component add rustfmt
 script:
     - cargo fmt --all -- --check
