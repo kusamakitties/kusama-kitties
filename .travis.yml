@@ -2,7 +2,8 @@ language: rust
 rust: nightly-2019-08-15
 cache: cargo
 before_script:
-    - ./scripts/init.sh
+    - rustup target add wasm32-unknown-unknown
+    - command -v wasm-gc || cargo install --git https://github.com/alexcrichton/wasm-gc --force
     - rustup component add rustfmt
 script:
     - cargo fmt --all -- --check
