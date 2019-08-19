@@ -1,11 +1,11 @@
-use crate::{KittiesAwakeTime, KittiesExp, Module, Trait};
+use crate::{Module, Trait};
 use codec::{CompactAs, Decode, Encode};
 use rand::{
 	distributions::{Distribution, Standard, Uniform},
 	seq::SliceRandom,
 	Rng,
 };
-use sr_primitives::traits::IntegerSquareRoot;
+use sr_primitives::traits::{IntegerSquareRoot, SaturatedConversion};
 use support::ensure;
 
 // number of items in different rarity (common, rare, epic)
@@ -30,18 +30,21 @@ const BREED_LEVEL: u8 = 3;
 
 #[cfg_attr(feature = "std", derive(Debug, Ord, PartialOrd))]
 #[derive(Encode, Decode, CompactAs, Default, Copy, Clone, PartialEq, Eq)]
-struct KittyIndex(u32);
+pub struct KittyIndex(u32);
 
 impl KittyIndex {
-	pub fn exp<T>(&self) -> u32 {
-		Module::<T>::kitty_exp(self.0)
+	pub fn exp<T: Trait>(&self) -> u32 {
+		Module::<T>::kitty_exp(self)
 	}
-	pub fn level<T>(&self) -> u8 {
+	pub fn level<T: Trait>(&self) -> u8 {
 		let exp = self.exp::<T>();
-		(exp / 10).integer_sqrt()
+		(exp / 10).integer_sqrt().saturated_into()
 	}
-	pub fn kitty<T>(&self) -> Option<Kitty<T>> {
-		Module::<T>::kitty(self.0)
+	pub fn kitty<T: Trait>(&self) -> Option<Kitty<T>> {
+		Module::<T>::kitty(self)
+	}
+	pub fn next_index(&self) -> Option<KittyIndex> {
+		self.0.checked_add(1).map(Self)
 	}
 }
 
@@ -189,8 +192,8 @@ impl<T: Trait> Kitty<T> {
 		parent_id_2: KittyIndex,
 		rng: &mut impl Rng,
 	) -> Result<Kitty<T>, &'static str> {
-		let parent1 = parent_id_1.kitty().ok_or("Invalid parent kitty 1")?;
-		let parent2 = parent_id_2.kitty().ok_or("Invalid parent kitty 2")?;
+		let parent1 = parent_id_1.kitty::<T>().ok_or("Invalid parent kitty 1")?;
+		let parent2 = parent_id_2.kitty::<T>().ok_or("Invalid parent kitty 2")?;
 
 		ensure!(
 			parent1.generation == parent2.generation,
@@ -198,16 +201,16 @@ impl<T: Trait> Kitty<T> {
 		);
 		ensure!(parent1.sex != parent2.sex, "Both parents must be different sex");
 
-		let level1 = parent1.level();
-		let level2 = parent2.level();
+		let level1 = parent_id_1.level::<T>();
+		let level2 = parent_id_2.level::<T>();
 
 		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
 		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
 
 		let parents = if parent1.sex == KittySex::Male {
-			(parent1, parent2)
+			(parent_id_1, parent_id_2)
 		} else {
-			(parent2, parent1)
+			(parent_id_2, parent_id_1)
 		};
 
 		let stats_range = Uniform::new(0, 5);
@@ -225,7 +228,7 @@ impl<T: Trait> Kitty<T> {
 			defence: stats_range.sample(rng),
 			stamina: stats_range.sample(rng),
 			element: rng.gen(),
-			parents,
+			parents: Some(parents),
 		})
 	}
 }

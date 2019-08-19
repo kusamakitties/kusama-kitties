@@ -120,7 +120,7 @@ impl<T: Trait> Module<T> {
 		let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
 		// Create and store kitty
 		<Kitties<T>>::insert(kitty_id, kitty);
-		if let Some(next_id) = kitty_id.checked_add(1) {
+		if let Some(next_id) = kitty_id.next_index() {
 			NextKittyIndex::put(next_id);
 		} else {
 			NextKittyIndex::kill();
