@@ -1,7 +1,7 @@
-use runtime_io::{blake2_256};
-use rand_chacha::ChaCha8Rng;
-use codec::Encode;
 use crate::Trait;
+use codec::Encode;
+use rand_chacha::ChaCha8Rng;
+use runtime_io::blake2_256;
 
 pub fn random_seed<T: Trait, I: Encode>(input: I) -> [u8; 32] {
 	// TODO: this randomness can be easily manipulated by block author

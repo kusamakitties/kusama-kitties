@@ -1,22 +1,23 @@
+use crate::Trait;
 use codec::{Decode, Encode};
 use rand::{
-	Rng,
+	distributions::{Distribution, Standard, Uniform},
 	seq::SliceRandom,
-	distributions::{Distribution, Uniform, Standard}
+	Rng,
 };
-use crate::Trait;
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Encode, Decode, PartialEq, Eq, Clone, Copy)]
 pub enum KittySex {
-	Female, Male
+	Female,
+	Male,
 }
 
 impl Distribution<KittySex> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> KittySex {
-        use self::KittySex::*;
+	fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> KittySex {
+		use self::KittySex::*;
 		*[Female, Male].choose(rng).unwrap()
-    }
+	}
 }
 
 #[cfg_attr(feature = "std", derive(Debug))]
@@ -27,21 +28,14 @@ pub enum KittyElement {
 	Wood,
 	Water,
 	Fire,
-	Earth
+	Earth,
 }
 
 impl Distribution<KittyElement> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> KittyElement {
-        use self::KittyElement::*;
-        *[
-			Natural,
-			Metal,
-			Wood,
-			Water,
-			Fire,
-			Earth
-		].choose(rng).unwrap()
-    }
+	fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> KittyElement {
+		use self::KittyElement::*;
+		*[Natural, Metal, Wood, Water, Fire, Earth].choose(rng).unwrap()
+	}
 }
 
 #[cfg_attr(feature = "std", derive(Debug))]
@@ -57,7 +51,7 @@ impl Rarity {
 		match self {
 			Rarity::Common => 4,
 			Rarity::Rare => 2,
-			Rarity::Epic => 1
+			Rarity::Epic => 1,
 		}
 	}
 
@@ -110,11 +104,11 @@ fn generate_appearance(counts: &(u8, u8, u8), rng: &mut impl Rng) -> u8 {
 	let max = common_max + rare_max + epic_max;
 	let value = rng.gen_range(0, max);
 	if value < common_max {
-		return Common.base_value() + value / Common.chance()
+		return Common.base_value() + value / Common.chance();
 	}
 	let value = value - common_max;
 	if value < rare_max {
-		return Rare.base_value() + value / Rare.chance()
+		return Rare.base_value() + value / Rare.chance();
 	}
 	let value = value - rare_max;
 	Epic.base_value() + value / Epic.chance()
@@ -144,8 +138,8 @@ impl<T: Trait> Kitty<T> {
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use rand_chacha::ChaCha8Rng;
 	use rand::SeedableRng;
+	use rand_chacha::ChaCha8Rng;
 	use std::collections::HashMap;
 
 	#[test]
@@ -159,7 +153,7 @@ mod tests {
 				Some(v) => *v += 1,
 				None => {
 					map.insert(val, 1);
-				},
+				}
 			};
 		}
 		assert_eq!(map.len(), 6);

@@ -1,10 +1,10 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 
+use rand::SeedableRng;
+use rstd::prelude::*;
 use rstd::result;
 use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, StorageMap, StorageValue};
 use system::ensure_signed;
-use rstd::prelude::*;
-use rand::SeedableRng;
 
 mod linked_item;
 use linked_item::{LinkedItem, LinkedList};
