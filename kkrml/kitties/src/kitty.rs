@@ -1,10 +1,49 @@
-use crate::Trait;
-use codec::{Decode, Encode};
+use crate::{KittiesAwakeTime, KittiesExp, Module, Trait};
+use codec::{CompactAs, Decode, Encode};
 use rand::{
 	distributions::{Distribution, Standard, Uniform},
 	seq::SliceRandom,
 	Rng,
 };
+use sr_primitives::traits::IntegerSquareRoot;
+use support::ensure;
+
+// number of items in different rarity (common, rare, epic)
+// be careful to make sure the counts never exceeds Rarity::base_value and overflow u8
+const APPEARANCE_ITEM_COUNT: [(u8, u8, u8); 6] = [
+	// accessories
+	(16, 4, 0),
+	// body
+	(12, 3, 0),
+	// eyes
+	(12, 15, 0),
+	// mouth
+	(8, 2, 0),
+	// fur
+	(8, 2, 0),
+	// zz
+	(1, 1, 1),
+];
+
+// min level to breed
+const BREED_LEVEL: u8 = 3;
+
+#[cfg_attr(feature = "std", derive(Debug, Ord, PartialOrd))]
+#[derive(Encode, Decode, CompactAs, Default, Copy, Clone, PartialEq, Eq)]
+struct KittyIndex(u32);
+
+impl KittyIndex {
+	pub fn exp<T>(&self) -> u32 {
+		Module::<T>::kitty_exp(self.0)
+	}
+	pub fn level<T>(&self) -> u8 {
+		let exp = self.exp::<T>();
+		(exp / 10).integer_sqrt()
+	}
+	pub fn kitty<T>(&self) -> Option<Kitty<T>> {
+		Module::<T>::kitty(self.0)
+	}
+}
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Encode, Decode, PartialEq, Eq, Clone, Copy)]
@@ -22,7 +61,7 @@ impl Distribution<KittySex> for Standard {
 
 #[cfg_attr(feature = "std", derive(Debug))]
 #[derive(Encode, Decode, PartialEq, Eq, Clone, Copy)]
-pub enum KittyElement {
+pub enum Element {
 	Natural,
 	Metal,
 	Wood,
@@ -31,9 +70,35 @@ pub enum KittyElement {
 	Earth,
 }
 
-impl Distribution<KittyElement> for Standard {
-	fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> KittyElement {
-		use self::KittyElement::*;
+impl Element {
+	pub fn generating(&self) -> Option<Element> {
+		use self::Element::*;
+		match self {
+			Natural => None,
+			Metal => Some(Water),
+			Wood => Some(Fire),
+			Water => Some(Wood),
+			Fire => Some(Earth),
+			Earth => Some(Metal),
+		}
+	}
+
+	pub fn overcoming(&self) -> Option<Element> {
+		use self::Element::*;
+		match self {
+			Natural => None,
+			Metal => Some(Wood),
+			Wood => Some(Earth),
+			Water => Some(Fire),
+			Fire => Some(Metal),
+			Earth => Some(Water),
+		}
+	}
+}
+
+impl Distribution<Element> for Standard {
+	fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Element {
+		use self::Element::*;
 		*[Natural, Metal, Wood, Water, Fire, Earth].choose(rng).unwrap()
 	}
 }
@@ -75,25 +140,9 @@ pub struct Kitty<T: Trait> {
 	attack: u8,
 	defence: u8,
 	stamina: u8,
-	element: KittyElement,
+	element: Element,
+	parents: Option<(KittyIndex, KittyIndex)>, // (father, mother)
 }
-
-// number of items in different rarity (common, rare, epic)
-// be careful to make sure the counts never exceeds Rarity::base_value and overflow u8
-const APPEARANCE_ITEM_COUNT: [(u8, u8, u8); 6] = [
-	// accessories
-	(16, 4, 0),
-	// body
-	(12, 3, 0),
-	// eyes
-	(12, 15, 0),
-	// mouth
-	(8, 2, 0),
-	// fur
-	(8, 2, 0),
-	// zz
-	(1, 1, 1),
-];
 
 fn generate_appearance(counts: &(u8, u8, u8), rng: &mut impl Rng) -> u8 {
 	use Rarity::*;
@@ -131,7 +180,53 @@ impl<T: Trait> Kitty<T> {
 			defence: stats_range.sample(rng),
 			stamina: stats_range.sample(rng),
 			element: rng.gen(),
+			parents: None,
 		}
+	}
+
+	pub fn from_parents(
+		parent_id_1: KittyIndex,
+		parent_id_2: KittyIndex,
+		rng: &mut impl Rng,
+	) -> Result<Kitty<T>, &'static str> {
+		let parent1 = parent_id_1.kitty().ok_or("Invalid parent kitty 1")?;
+		let parent2 = parent_id_2.kitty().ok_or("Invalid parent kitty 2")?;
+
+		ensure!(
+			parent1.generation == parent2.generation,
+			"Both parents must be same generation"
+		);
+		ensure!(parent1.sex != parent2.sex, "Both parents must be different sex");
+
+		let level1 = parent1.level();
+		let level2 = parent2.level();
+
+		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
+		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
+
+		let parents = if parent1.sex == KittySex::Male {
+			(parent1, parent2)
+		} else {
+			(parent2, parent1)
+		};
+
+		let stats_range = Uniform::new(0, 5);
+		let mut appearance = [0u8; 6];
+		for i in 0..6 {
+			appearance[i] = generate_appearance(&APPEARANCE_ITEM_COUNT[i], rng);
+		}
+		Ok(Kitty {
+			birth: <timestamp::Module<T>>::now(),
+			generation: parent1.generation.checked_add(1).ok_or("Generation overflow")?,
+			appearance,
+			sex: rng.gen(),
+			health: stats_range.sample(rng),
+			attack: stats_range.sample(rng),
+			defence: stats_range.sample(rng),
+			stamina: stats_range.sample(rng),
+			element: rng.gen(),
+			parents,
+		})
 	}
 }
 

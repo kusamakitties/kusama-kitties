@@ -10,7 +10,7 @@ mod linked_item;
 use linked_item::{LinkedItem, LinkedList};
 
 mod kitty;
-use kitty::Kitty;
+use kitty::{Kitty, KittyIndex};
 
 mod random;
 use random::{random_seed, Rng};
@@ -21,7 +21,6 @@ pub trait Trait: timestamp::Trait {
 }
 
 // type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
-type KittyIndex = u32;
 
 type KittyLinkedItem = LinkedItem<KittyIndex>;
 type OwnedKittiesList<T> = LinkedList<OwnedKitties<T>, <T as system::Trait>::AccountId, KittyIndex>;
@@ -75,11 +74,10 @@ decl_module! {
 		/// Create a new kitty
 		pub fn create(origin) {
 			let sender = ensure_signed(origin)?;
-			let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
 
 			// Create and store kitty
 			let kitty = Kitty::new(&mut rng::<T>(&sender));
-			Self::insert_kitty(&sender, kitty_id, kitty);
+			let kitty_id = Self::insert_kitty(&sender, kitty)?;
 
 			Self::deposit_event(RawEvent::Captured(sender, kitty_id));
 		}
@@ -118,7 +116,8 @@ impl<T: Trait> Module<T> {
 		<OwnedKittiesList<T>>::append(owner, kitty_id);
 	}
 
-	fn insert_kitty(owner: &T::AccountId, kitty_id: KittyIndex, kitty: Kitty<T>) {
+	fn insert_kitty(owner: &T::AccountId, kitty: Kitty<T>) -> result::Result<KittyIndex, &'static str> {
+		let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
 		// Create and store kitty
 		<Kitties<T>>::insert(kitty_id, kitty);
 		if let Some(next_id) = kitty_id.checked_add(1) {
@@ -130,6 +129,8 @@ impl<T: Trait> Module<T> {
 		<KittyOwners<T>>::insert(kitty_id, owner.clone());
 
 		Self::insert_owned_kitty(owner, kitty_id);
+
+		Ok(kitty_id)
 	}
 
 	fn do_breed(
@@ -137,11 +138,6 @@ impl<T: Trait> Module<T> {
 		kitty_id_1: KittyIndex,
 		kitty_id_2: KittyIndex,
 	) -> result::Result<KittyIndex, &'static str> {
-		let kitty1 = Self::kitty(kitty_id_1);
-		let kitty2 = Self::kitty(kitty_id_2);
-
-		ensure!(kitty1.is_some(), "Invalid kitty_id_1");
-		ensure!(kitty2.is_some(), "Invalid kitty_id_2");
 		ensure!(kitty_id_1 != kitty_id_2, "Needs different parent");
 		ensure!(
 			Self::kitty_owner(&kitty_id_1)
@@ -156,21 +152,9 @@ impl<T: Trait> Module<T> {
 			"Not owner of kitty2"
 		);
 
-		let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
+		let new_kitty = Kitty::from_parents(kitty_id_1, kitty_id_2, &mut rng::<T>(&sender))?;
 
-		// let kitty1_dna = kitty1.unwrap();
-		// let kitty2_dna = kitty2.unwrap();
-
-		// // Generate a random 128bit value
-		// let selector = Self::random_value(&sender);
-		// let mut new_dna = [0u8; 16];
-
-		// // Combine parents and selector to create new kitty
-		// for i in 0..kitty1_dna.len() {
-		// 	new_dna[i] = combine_dna(kitty1_dna[i], kitty2_dna[i], selector[i]);
-		// }
-
-		Self::insert_kitty(sender, kitty_id, Kitty::new(&mut rng::<T>(sender)));
+		let kitty_id = Self::insert_kitty(sender, new_kitty)?;
 
 		Ok(kitty_id)
 	}
