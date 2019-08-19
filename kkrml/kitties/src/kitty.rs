@@ -110,13 +110,14 @@ fn generate_appearance(counts: &(u8, u8, u8), rng: &mut impl Rng) -> u8 {
 	let max = common_max + rare_max + epic_max;
 	let value = rng.gen_range(0, max);
 	if value < common_max {
-		Common.base_value() + value / Common.chance()
-	} else if value < rare_max {
-		Rare.base_value() + value / Rare.chance()
-	} else {
-		Epic.base_value() + value / Epic.chance()
+		return Common.base_value() + value / Common.chance()
 	}
-
+	let value = value - common_max;
+	if value < rare_max {
+		return Rare.base_value() + value / Rare.chance()
+	}
+	let value = value - rare_max;
+	Epic.base_value() + value / Epic.chance()
 }
 
 impl<T: Trait> Kitty<T> {
@@ -137,5 +138,45 @@ impl<T: Trait> Kitty<T> {
 			stamina: stats_range.sample(rng),
 			element: rng.gen(),
 		}
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::*;
+	use rand_chacha::ChaCha8Rng;
+	use rand::SeedableRng;
+	use std::collections::HashMap;
+
+	#[test]
+	fn test_generate_appearance_probability() {
+		let mut rng = ChaCha8Rng::seed_from_u64(100);
+		let mut map = HashMap::<u8, u32>::new();
+		// max = 3 * 4 + 2 * 2 + 1 = 17
+		for _ in 0..17000 {
+			let val = generate_appearance(&(3, 2, 1), &mut rng);
+			match map.get_mut(&val) {
+				Some(v) => *v += 1,
+				None => {
+					map.insert(val, 1);
+				},
+			};
+		}
+		assert_eq!(map.len(), 6);
+		// common = 4
+		let value = map.get(&0).unwrap();
+		assert!((3800..4200).contains(value));
+		let value = map.get(&1).unwrap();
+		assert!((3800..4200).contains(value));
+		let value = map.get(&2).unwrap();
+		assert!((3800..4200).contains(value));
+		// rare = 2
+		let value = map.get(&100).unwrap();
+		assert!((1900..2100).contains(value));
+		let value = map.get(&101).unwrap();
+		assert!((1900..2100).contains(value));
+		// epic = 1
+		let value = map.get(&170).unwrap();
+		assert!((900..1100).contains(value));
 	}
 }

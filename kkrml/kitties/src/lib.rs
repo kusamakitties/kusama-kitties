@@ -250,8 +250,15 @@ mod tests {
 		type TransactionByteFee = TransactionByteFee;
 		type WeightToFee = ();
 	}
+	parameter_types! {
+		pub const MinimumPeriod: u64 = 1000;
+	}
+	impl timestamp::Trait for Test {
+		type Moment = u64;
+		type OnTimestampSet = ();
+		type MinimumPeriod = MinimumPeriod;
+	}
 	impl Trait for Test {
-		type KittyIndex = u32;
 		type Currency = balances::Module<Test>;
 		type Event = ();
 	}
