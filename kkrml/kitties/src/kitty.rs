@@ -179,16 +179,16 @@ impl Rarity {
 #[cfg_attr(feature = "std", derive(Debug, PartialEq, Eq))]
 #[derive(Encode, Decode)]
 pub struct Kitty<T: Trait> {
-	birth: T::Moment,
-	generation: u8,
-	appearance: [u8; 6],
-	sex: KittySex,
-	health: u8,
-	attack: u8,
-	defence: u8,
-	stamina: u8,
-	element: Element,
-	parents: Option<(KittyIndex, KittyIndex)>, // (father, mother)
+	pub birth: T::Moment,
+	pub generation: u8,
+	pub appearance: [u8; 6],
+	pub sex: KittySex,
+	pub health: u8,
+	pub attack: u8,
+	pub defence: u8,
+	pub stamina: u8,
+	pub element: Element,
+	pub parents: Option<(KittyIndex, KittyIndex)>, // (father, mother)
 }
 
 fn generate_appearance(counts: &(u8, u8, u8), rng: &mut impl Rng) -> u8 {
@@ -247,6 +247,12 @@ impl<T: Trait> Kitty<T> {
 
 		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
 		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
+
+		if let (Some((p1f, p1m)), Some((p2f, p2m))) = (parent1.kitty().parents, parent2.kitty().parents) {
+			// not first generation, ensure not siblings
+			ensure!(p1f != p2f, "Kitties have same father");
+			ensure!(p1m != p2m, "Kitties have same mother");
+		}
 
 		let parents = if parent1.kitty().sex == KittySex::Male {
 			(parent1.index(), parent2.index())
