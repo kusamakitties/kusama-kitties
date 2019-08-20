@@ -33,18 +33,62 @@ const BREED_LEVEL: u8 = 3;
 pub struct KittyIndex(u32);
 
 impl KittyIndex {
-	pub fn exp<T: Trait>(&self) -> u32 {
-		Module::<T>::kitty_exp(self)
-	}
-	pub fn level<T: Trait>(&self) -> u8 {
-		let exp = self.exp::<T>();
-		(exp / 10).integer_sqrt().saturated_into()
-	}
-	pub fn kitty<T: Trait>(&self) -> Option<Kitty<T>> {
-		Module::<T>::kitty(self)
-	}
 	pub fn next_index(&self) -> Option<KittyIndex> {
 		self.0.checked_add(1).map(Self)
+	}
+}
+
+#[cfg(test)]
+impl From<u32> for KittyIndex {
+	fn from(id: u32) -> Self {
+		Self(id)
+	}
+}
+
+pub struct KittyDetails<T: Trait> {
+	index: KittyIndex,
+	kitty: Kitty<T>,
+	exp: Option<u32>,
+	level: Option<u8>,
+}
+
+impl<T: Trait> KittyDetails<T> {
+	pub fn from(id: KittyIndex) -> Option<KittyDetails<T>> {
+		if let Some(kitty) = Module::<T>::kitty(&id) {
+			Some(KittyDetails {
+				index: id,
+				kitty,
+				exp: None,
+				level: None
+			})
+		} else {
+			None
+		}
+	}
+
+	pub fn index(&self) -> KittyIndex {
+		self.index
+	}
+	pub fn kitty(&self) -> &Kitty<T> {
+		&self.kitty
+	}
+	pub fn exp(&mut self) -> u32 {
+		if let Some(exp) = self.exp {
+			exp
+		} else {
+			let exp = Module::<T>::kitty_exp(&self.index);
+			self.exp = Some(exp);
+			exp
+		}
+	}
+	pub fn level(&mut self) -> u8 {
+		if let Some(level) = self.level {
+			level
+		} else {
+			let level = (self.exp() / 10).integer_sqrt().saturated_into();
+			self.level = Some(level);
+			level
+		}
 	}
 }
 
@@ -188,29 +232,26 @@ impl<T: Trait> Kitty<T> {
 	}
 
 	pub fn from_parents(
-		parent_id_1: KittyIndex,
-		parent_id_2: KittyIndex,
+		parent1: &mut KittyDetails<T>,
+		parent2: &mut KittyDetails<T>,
 		rng: &mut impl Rng,
 	) -> Result<Kitty<T>, &'static str> {
-		let parent1 = parent_id_1.kitty::<T>().ok_or("Invalid parent kitty 1")?;
-		let parent2 = parent_id_2.kitty::<T>().ok_or("Invalid parent kitty 2")?;
-
 		ensure!(
-			parent1.generation == parent2.generation,
+			parent1.kitty().generation == parent2.kitty().generation,
 			"Both parents must be same generation"
 		);
-		ensure!(parent1.sex != parent2.sex, "Both parents must be different sex");
+		ensure!(parent1.kitty().sex != parent2.kitty().sex, "Both parents must be different sex");
 
-		let level1 = parent_id_1.level::<T>();
-		let level2 = parent_id_2.level::<T>();
+		let level1 = parent1.level();
+		let level2 = parent2.level();
 
 		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
 		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
 
-		let parents = if parent1.sex == KittySex::Male {
-			(parent_id_1, parent_id_2)
+		let parents = if parent1.kitty().sex == KittySex::Male {
+			(parent1.index(), parent2.index())
 		} else {
-			(parent_id_2, parent_id_1)
+			(parent2.index(), parent1.index())
 		};
 
 		let stats_range = Uniform::new(0, 5);
@@ -220,7 +261,7 @@ impl<T: Trait> Kitty<T> {
 		}
 		Ok(Kitty {
 			birth: <timestamp::Module<T>>::now(),
-			generation: parent1.generation.checked_add(1).ok_or("Generation overflow")?,
+			generation: parent1.kitty().generation.checked_add(1).ok_or("Generation overflow")?,
 			appearance,
 			sex: rng.gen(),
 			health: stats_range.sample(rng),
