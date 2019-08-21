@@ -202,7 +202,6 @@ impl sudo::Trait for Runtime {
 
 impl kitties::Trait for Runtime {
 	type Event = Event;
-	type KittyIndex = u32;
 	type Currency = Balances;
 }
 

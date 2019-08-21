@@ -10,8 +10,11 @@ codec = { package = "parity-scale-codec", version = "1.0.0", default-features = 
 sr-primitives = { git = "https://github.com/paritytech/substrate.git", default-features = false }
 support = { package = "srml-support", git = "https://github.com/paritytech/substrate.git", default-features = false }
 system = { package = "srml-system", git = "https://github.com/paritytech/substrate.git", default-features = false }
+timestamp = { package = "srml-timestamp", git = "https://github.com/paritytech/substrate.git", default-features = false }
 runtime_io = { package = "sr-io", git = "https://github.com/paritytech/substrate.git", default-features = false }
 rstd = { package = "sr-std", git = "https://github.com/paritytech/substrate.git", default-features = false }
+rand = { version = "0.7", git = "https://github.com/rust-random/rand.git", default-features = false }
+rand_chacha = { version = "0.2", git = "https://github.com/rust-random/rand.git", default-features = false }
 
 [dev-dependencies]
 primitives = { package = "substrate-primitives", git = "https://github.com/paritytech/substrate.git" }
@@ -25,6 +28,9 @@ std = [
 	"sr-primitives/std",
 	"support/std",
 	"system/std",
+	"timestamp/std",
 	"runtime_io/std",
 	"rstd/std",
+	"rand/std",
+	"rand_chacha/std",
 ]
