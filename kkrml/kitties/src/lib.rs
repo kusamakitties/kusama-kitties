@@ -10,7 +10,7 @@ mod linked_item;
 use linked_item::{LinkedItem, LinkedList};
 
 mod kitty;
-use kitty::{Kitty, KittyIndex, KittyDetails};
+use kitty::{Kitty, KittyDetails, KittyIndex};
 
 mod random;
 use random::{random_seed, Rng};

@@ -59,7 +59,7 @@ impl<T: Trait> KittyDetails<T> {
 				index: id,
 				kitty,
 				exp: None,
-				level: None
+				level: None,
 			})
 		} else {
 			None
@@ -240,7 +240,10 @@ impl<T: Trait> Kitty<T> {
 			parent1.kitty().generation == parent2.kitty().generation,
 			"Both parents must be same generation"
 		);
-		ensure!(parent1.kitty().sex != parent2.kitty().sex, "Both parents must be different sex");
+		ensure!(
+			parent1.kitty().sex != parent2.kitty().sex,
+			"Both parents must be different sex"
+		);
 
 		let level1 = parent1.level();
 		let level2 = parent2.level();
