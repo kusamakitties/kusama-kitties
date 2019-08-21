@@ -7,6 +7,7 @@ use rand::{
 };
 use sr_primitives::traits::{IntegerSquareRoot, SaturatedConversion};
 use support::ensure;
+use rstd::cmp;
 
 // number of items in different rarity (common, rare, epic)
 // be careful to make sure the counts never exceeds Rarity::base_value and overflow u8
@@ -210,6 +211,25 @@ fn generate_appearance(counts: &(u8, u8, u8), rng: &mut impl Rng) -> u8 {
 	Epic.base_value() + value / Epic.chance()
 }
 
+fn calc_mutate_chance(generation: u8, level: u32) -> u8 {
+	cmp::min(10u32 + (generation as u32 + level) * 2, 40) as u8
+}
+
+enum ChooseResult {
+	Father, Mother, Mutate,
+}
+fn choose(rng: &mut impl Rng, mutate_chance: u8) -> ChooseResult {
+	let val: u8 = rng.gen_range(0, 100);
+	let no_mutate = 100 - mutate_chance;
+	if val < no_mutate / 2 {
+		ChooseResult::Father
+	} else if val < no_mutate {
+		ChooseResult::Mother
+	} else {
+		ChooseResult::Mutate
+	}
+}
+
 impl<T: Trait> Kitty<T> {
 	pub fn new(rng: &mut impl Rng) -> Kitty<T> {
 		let stats_range = Uniform::new(0, 5);
@@ -236,28 +256,31 @@ impl<T: Trait> Kitty<T> {
 		parent2: &mut KittyDetails<T>,
 		rng: &mut impl Rng,
 	) -> Result<Kitty<T>, &'static str> {
+		let level1 = parent1.level();
+		let level2 = parent2.level();
+
+		let kitty1 = parent1.kitty();
+		let kitty2 = parent2.kitty();
+
 		ensure!(
-			parent1.kitty().generation == parent2.kitty().generation,
+			kitty1.generation == kitty2.generation,
 			"Both parents must be same generation"
 		);
 		ensure!(
-			parent1.kitty().sex != parent2.kitty().sex,
+			kitty1.sex != kitty2.sex,
 			"Both parents must be different sex"
 		);
-
-		let level1 = parent1.level();
-		let level2 = parent2.level();
 
 		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
 		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
 
-		if let (Some((p1f, p1m)), Some((p2f, p2m))) = (parent1.kitty().parents, parent2.kitty().parents) {
+		if let (Some((p1f, p1m)), Some((p2f, p2m))) = (kitty1.parents, kitty2.parents) {
 			// not first generation, ensure not siblings
 			ensure!(p1f != p2f, "Kitties have same father");
 			ensure!(p1m != p2m, "Kitties have same mother");
 		}
 
-		let parents = if parent1.kitty().sex == KittySex::Male {
+		let parents = if kitty1.sex == KittySex::Male {
 			(parent1.index(), parent2.index())
 		} else {
 			(parent2.index(), parent1.index())
@@ -265,21 +288,62 @@ impl<T: Trait> Kitty<T> {
 
 		let stats_range = Uniform::new(0, 5);
 		let mut appearance = [0u8; 6];
+		let parent1_appearance = &kitty1.appearance;
+		let parent2_appearance = &kitty2.appearance;
+		let mutate_chance = calc_mutate_chance(kitty1.generation, level1 as u32 + level2 as u32);
 		for i in 0..6 {
-			appearance[i] = generate_appearance(&APPEARANCE_ITEM_COUNT[i], rng);
+			appearance[i] = match choose(rng, mutate_chance) {
+				ChooseResult::Father => parent1_appearance[i],
+				ChooseResult::Mother => parent2_appearance[i],
+				ChooseResult::Mutate => generate_appearance(&APPEARANCE_ITEM_COUNT[i], rng),
+			}
 		}
-		Ok(Kitty {
+		let mut kitten = Kitty {
 			birth: <timestamp::Module<T>>::now(),
-			generation: parent1.kitty().generation.checked_add(1).ok_or("Generation overflow")?,
+			generation: kitty1.generation.checked_add(1).ok_or("Generation overflow")?,
 			appearance,
 			sex: rng.gen(),
-			health: stats_range.sample(rng),
-			attack: stats_range.sample(rng),
-			defence: stats_range.sample(rng),
-			stamina: stats_range.sample(rng),
-			element: rng.gen(),
+			health: match choose(rng, mutate_chance) {
+				ChooseResult::Father => kitty1.health,
+				ChooseResult::Mother => kitty2.health,
+				ChooseResult::Mutate => stats_range.sample(rng),
+			},
+			attack: match choose(rng, mutate_chance) {
+				ChooseResult::Father => kitty1.attack,
+				ChooseResult::Mother => kitty2.attack,
+				ChooseResult::Mutate => stats_range.sample(rng),
+			},
+			defence: match choose(rng, mutate_chance) {
+				ChooseResult::Father => kitty1.defence,
+				ChooseResult::Mother => kitty2.defence,
+				ChooseResult::Mutate => stats_range.sample(rng),
+			},
+			stamina: match choose(rng, mutate_chance) {
+				ChooseResult::Father => kitty1.stamina,
+				ChooseResult::Mother => kitty2.stamina,
+				ChooseResult::Mutate => stats_range.sample(rng),
+			},
+			element: match choose(rng, 10) {
+				ChooseResult::Father => kitty1.element,
+				ChooseResult::Mother => kitty2.element,
+				ChooseResult::Mutate => Element::Natural,
+			},
 			parents: Some(parents),
-		})
+		};
+
+		// boost the stats if one parent's element generating the other one
+
+		if kitty1.element.generating() == Some(kitty2.element) || kitty2.element.generating() == Some(kitty1.element) {
+			match rng.gen_range(0, 4) {
+				0 => kitten.health = cmp::min(kitten.health + 1, 6),
+				1 => kitten.attack = cmp::min(kitten.attack + 1, 6),
+				2 => kitten.defence = cmp::min(kitten.defence + 1, 6),
+				3 => kitten.stamina = cmp::min(kitten.stamina + 1, 6),
+				_ => ()
+			}
+		}
+
+		Ok(kitten)
 	}
 }
 
@@ -320,5 +384,12 @@ mod tests {
 		// epic = 1
 		let value = map.get(&170).unwrap();
 		assert!((900..1100).contains(value));
+	}
+
+	#[test]
+	fn test_calc_mutate_chance() {
+		assert_eq!(calc_mutate_chance(0, 0), 10);
+		assert_eq!(calc_mutate_chance(5, 4), 28);
+		assert_eq!(calc_mutate_chance(255, 255 + 255), 40);
 	}
 }
