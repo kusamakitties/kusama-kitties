@@ -5,9 +5,9 @@ use rand::{
 	seq::SliceRandom,
 	Rng,
 };
+use rstd::cmp;
 use sr_primitives::traits::{IntegerSquareRoot, SaturatedConversion};
 use support::ensure;
-use rstd::cmp;
 
 // number of items in different rarity (common, rare, epic)
 // be careful to make sure the counts never exceeds Rarity::base_value and overflow u8
@@ -216,7 +216,9 @@ fn calc_mutate_chance(generation: u8, level: u32) -> u8 {
 }
 
 enum ChooseResult {
-	Father, Mother, Mutate,
+	Father,
+	Mother,
+	Mutate,
 }
 fn choose(rng: &mut impl Rng, mutate_chance: u8) -> ChooseResult {
 	let val: u8 = rng.gen_range(0, 100);
@@ -266,10 +268,7 @@ impl<T: Trait> Kitty<T> {
 			kitty1.generation == kitty2.generation,
 			"Both parents must be same generation"
 		);
-		ensure!(
-			kitty1.sex != kitty2.sex,
-			"Both parents must be different sex"
-		);
+		ensure!(kitty1.sex != kitty2.sex, "Both parents must be different sex");
 
 		ensure!(level1 >= BREED_LEVEL, "Parent level too low to breed");
 		ensure!(level2 >= BREED_LEVEL, "Parent level too low to breed");
@@ -339,7 +338,7 @@ impl<T: Trait> Kitty<T> {
 				1 => kitten.attack = cmp::min(kitten.attack + 1, 6),
 				2 => kitten.defence = cmp::min(kitten.defence + 1, 6),
 				3 => kitten.stamina = cmp::min(kitten.stamina + 1, 6),
-				_ => ()
+				_ => (),
 			}
 		}
 
