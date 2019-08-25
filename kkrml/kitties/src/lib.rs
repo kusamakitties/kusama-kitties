@@ -3,7 +3,8 @@
 use rand::SeedableRng;
 use rstd::prelude::*;
 use rstd::result;
-use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, StorageMap, StorageValue};
+use rstd::{cmp, convert::{TryInto, Into}};
+use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, traits::Get, StorageMap, StorageValue};
 use system::ensure_signed;
 
 mod linked_item;
@@ -18,9 +19,13 @@ use random::{random_seed, Rng};
 pub trait Trait: timestamp::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId>;
+
+	type ClaimSecondsPerExp: Get<Self::Moment>;
+	type ClaimCurrencyPerSecond: Get<BalanceOf<Self>>;
+	type ClaimSecondsMax: Get<Self::Moment>;
 }
 
-// type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
+type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
 
 type KittyLinkedItem = LinkedItem<KittyIndex>;
 type OwnedKittiesList<T> = LinkedList<OwnedKitties<T>, <T as system::Trait>::AccountId, KittyIndex>;
@@ -46,6 +51,9 @@ decl_storage! {
 		/// Get kitty awake time by kitty id
 		pub KittiesAwakeTime get(kitty_awake_time): map KittyIndex => T::Moment;
 
+		/// Get kitty last claim by kitty id
+		pub KittiesLastClaimTime get(kitty_last_claim_time): map KittyIndex => T::Moment;
+
 		/// Get kitty ownership. Stored in a linked map.
 		pub OwnedKitties get(owned_kitties): map (T::AccountId, Option<KittyIndex>) => Option<KittyLinkedItem>;
 
@@ -69,6 +77,11 @@ decl_event!(
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
+
+		const ClaimSecondsPerExp: T::Moment = T::ClaimSecondsPerExp::get();
+		const ClaimCurrencyPerSecond: BalanceOf<T> = T::ClaimCurrencyPerSecond::get();
+		const ClaimSecondsMax: T::Moment = T::ClaimSecondsMax::get();
+
 		fn deposit_event<T>() = default;
 
 		/// Create a new kitty
@@ -108,6 +121,29 @@ decl_module! {
 
 			Self::deposit_event(RawEvent::Transferred(sender, to, kitty_id));
 		}
+
+		pub fn claim(origin, kitty_id: KittyIndex) {
+			let sender = ensure_signed(origin)?;
+			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can claim their kitty rewards");
+
+			// TODO: remove bunch clones when https://github.com/paritytech/substrate/pull/3476 is merged
+
+			let last_claim = Self::kitty_last_claim_time(kitty_id);
+			let now = timestamp::Module::<T>::now();
+			let time_diff = cmp::min(now.clone() - last_claim, T::ClaimSecondsMax::get());
+
+			let reward_exp = time_diff.clone() / T::ClaimSecondsPerExp::get();
+			let reward_exp: u32 = TryInto::<u32>::try_into(reward_exp).map_err(|_| "Reward exp overflow")?;
+			let new_exp = Self::kitty_exp(kitty_id).checked_add(reward_exp).ok_or("Kitty exp overflow")?;
+
+			let time_diff = TryInto::<u32>::try_into(time_diff).map_err(|_| "Time diff overflow")?;
+			let reward_currency = Into::<BalanceOf<T>>::into(time_diff) * T::ClaimCurrencyPerSecond::get();
+			let reward_currency: BalanceOf<T> = reward_currency.into();
+
+			T::Currency::deposit_into_existing(&sender, reward_currency)?;
+			KittiesExp::insert(kitty_id, new_exp);
+			KittiesLastClaimTime::<T>::insert(kitty_id, now);
+		}
 	}
 }
 
@@ -127,6 +163,7 @@ impl<T: Trait> Module<T> {
 		}
 
 		<KittyOwners<T>>::insert(kitty_id, owner.clone());
+		<KittiesLastClaimTime<T>>::insert(kitty_id, timestamp::Module::<T>::now());
 
 		Self::insert_owned_kitty(owner, kitty_id);
 
@@ -244,9 +281,19 @@ mod tests {
 		type OnTimestampSet = ();
 		type MinimumPeriod = MinimumPeriod;
 	}
+
+	parameter_types! {
+		pub const ClaimSecondsPerExp: u64 = 50; // 10s
+		pub const ClaimCurrencyPerSecond: u64 = 10; // $1 per 2000s
+		pub const ClaimSecondsMax: u64 = 100;
+	}
+
 	impl Trait for Test {
 		type Event = ();
 		type Currency = balances::Module<Test>;
+		type ClaimSecondsPerExp = ClaimSecondsPerExp;
+		type ClaimCurrencyPerSecond = ClaimCurrencyPerSecond;
+		type ClaimSecondsMax = ClaimSecondsMax;
 	}
 	type OwnedKittiesTest = OwnedKitties<Test>;
 
@@ -255,6 +302,9 @@ mod tests {
 	pub fn new_test_ext() -> runtime_io::TestExternalities<Blake2Hasher> {
 		system::GenesisConfig::default().build_storage::<Test>().unwrap().into()
 	}
+
+	// TODO: test claim exp & claim seconds max
+	// TODO: test claim currency & claim seconds max
 
 	#[test]
 	fn owned_kitties_can_append_values() {
