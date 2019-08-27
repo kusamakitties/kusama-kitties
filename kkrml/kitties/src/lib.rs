@@ -3,8 +3,15 @@
 use rand::SeedableRng;
 use rstd::prelude::*;
 use rstd::result;
-use rstd::{cmp, convert::{TryInto, Into}};
-use support::{decl_event, decl_module, decl_storage, ensure, traits::{Currency, WithdrawReason, ExistenceRequirement}, StorageMap, StorageValue};
+use rstd::{
+	cmp,
+	convert::{Into, TryInto},
+};
+use support::{
+	decl_event, decl_module, decl_storage, ensure,
+	traits::{Currency, ExistenceRequirement, WithdrawReason},
+	StorageMap, StorageValue,
+};
 use system::ensure_signed;
 
 mod linked_item;
@@ -107,6 +114,17 @@ decl_module! {
 
 			let new_kitty = Self::do_breed(&sender, kitty_id_1, kitty_id_2)?;
 
+			let generation_cost = constants::BREED_KITTY_COST_PER_GENERATION
+				.checked_mul(new_kitty.generation.into())
+				.ok_or("Breed cost calculation overflow")?;
+			let total_cost = constants::BREED_KITTY_BASE_COST
+				.checked_add(generation_cost)
+				.ok_or("Breed cost calculation overflow")?;
+			let total_cost = Self::to_balance(total_cost)?;
+
+			// pay breed cost
+			T::Currency::withdraw(&sender, total_cost, WithdrawReason::Fee, ExistenceRequirement::KeepAlive)?;
+
 			Self::insert_kitty(&sender, new_kitty_id, new_kitty);
 
 			Self::deposit_event(RawEvent::Born(sender, new_kitty_id));
@@ -158,7 +176,10 @@ impl<T: Trait> Module<T> {
 	}
 
 	fn ensure_owner(owner: &T::AccountId, kitty_id: KittyIndex) -> result::Result<(), &'static str> {
-		ensure!(<OwnedKitties<T>>::exists(&(owner.clone(), Some(kitty_id))), "Not owner of kitty");
+		ensure!(
+			<OwnedKitties<T>>::exists(&(owner.clone(), Some(kitty_id))),
+			"Not owner of kitty"
+		);
 		Ok(())
 	}
 
