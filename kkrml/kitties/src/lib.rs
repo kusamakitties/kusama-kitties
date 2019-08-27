@@ -4,7 +4,7 @@ use rand::SeedableRng;
 use rstd::prelude::*;
 use rstd::result;
 use rstd::{cmp, convert::{TryInto, Into}};
-use support::{decl_event, decl_module, decl_storage, ensure, traits::{Currency, Get, WithdrawReason, ExistenceRequirement}, StorageMap, StorageValue};
+use support::{decl_event, decl_module, decl_storage, ensure, traits::{Currency, WithdrawReason, ExistenceRequirement}, StorageMap, StorageValue};
 use system::ensure_signed;
 
 mod linked_item;
@@ -16,14 +16,11 @@ use kitty::{Kitty, KittyDetails, KittyIndex};
 mod random;
 use random::{random_seed, Rng};
 
+mod constants;
+
 pub trait Trait: timestamp::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId>;
-
-	type ClaimSecondsPerExp: Get<Self::Moment>;
-	type ClaimCurrencyPerSecond: Get<BalanceOf<Self>>;
-	type ClaimSecondsMax: Get<Self::Moment>;
-	type CaptureKittyCost: Get<BalanceOf<Self>>;
 }
 
 type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
@@ -78,12 +75,6 @@ decl_event!(
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-
-		const ClaimSecondsPerExp: T::Moment = T::ClaimSecondsPerExp::get();
-		const ClaimCurrencyPerSecond: BalanceOf<T> = T::ClaimCurrencyPerSecond::get();
-		const ClaimSecondsMax: T::Moment = T::ClaimSecondsMax::get();
-		const CaptureKittyCost: BalanceOf<T> = T::CaptureKittyCost::get();
-
 		fn deposit_event<T>() = default;
 
 		/// Capture a wild kitty
@@ -92,7 +83,7 @@ decl_module! {
 			let new_kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
 
 			// pay capture cost
-			T::Currency::withdraw(&sender, T::CaptureKittyCost::get(), WithdrawReason::Fee, ExistenceRequirement::KeepAlive)?;
+			T::Currency::withdraw(&sender, Self::to_balance(constants::CAPTURE_KITTY_COST)?, WithdrawReason::Fee, ExistenceRequirement::KeepAlive)?;
 
 			// Create and store kitty
 			let kitty = Kitty::new(&mut rng::<T>(&sender));
@@ -140,14 +131,14 @@ decl_module! {
 
 			let last_claim = Self::kitty_last_claim_time(kitty_id);
 			let now = timestamp::Module::<T>::now();
-			let time_diff = cmp::min(now.clone() - last_claim, T::ClaimSecondsMax::get());
+			let time_diff = cmp::min(now.clone() - last_claim, Self::to_moment(constants::CLAIM_SECONDS_MAX)?);
 
-			let reward_exp = time_diff.clone() / T::ClaimSecondsPerExp::get();
+			let reward_exp = time_diff.clone() / Self::to_moment(constants::CLAIM_SECONDS_PER_EXP)?;
 			let reward_exp: u32 = TryInto::<u32>::try_into(reward_exp).map_err(|_| "Reward exp overflow")?;
 			let new_exp = Self::kitty_exp(kitty_id).checked_add(reward_exp).ok_or("Kitty exp overflow")?;
 
 			let time_diff = TryInto::<u32>::try_into(time_diff).map_err(|_| "Time diff overflow")?;
-			let reward_currency = Into::<BalanceOf<T>>::into(time_diff) * T::ClaimCurrencyPerSecond::get();
+			let reward_currency = Into::<BalanceOf<T>>::into(time_diff) * Self::to_balance(constants::CLAIM_CURRENCY_PER_SECOND)?;
 			let reward_currency: BalanceOf<T> = reward_currency.into();
 
 			T::Currency::deposit_into_existing(&sender, reward_currency)?;
@@ -158,6 +149,14 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
+	fn to_balance(val: u128) -> result::Result<BalanceOf<T>, &'static str> {
+		val.try_into().map_err(|_| "Convert to Balance type overflow")
+	}
+
+	fn to_moment(val: u64) -> result::Result<T::Moment, &'static str> {
+		val.try_into().map_err(|_| "Convert to Moment type overflow")
+	}
+
 	fn ensure_owner(owner: &T::AccountId, kitty_id: KittyIndex) -> result::Result<(), &'static str> {
 		ensure!(<OwnedKitties<T>>::exists(&(owner.clone(), Some(kitty_id))), "Not owner of kitty");
 		Ok(())
@@ -292,20 +291,9 @@ mod tests {
 		type MinimumPeriod = MinimumPeriod;
 	}
 
-	parameter_types! {
-		pub const ClaimSecondsPerExp: u64 = 50; // 10s
-		pub const ClaimCurrencyPerSecond: u64 = 10; // $1 per 2000s
-		pub const ClaimSecondsMax: u64 = 100;
-		pub const CaptureKittyCost: u64 = 100;
-	}
-
 	impl Trait for Test {
 		type Event = ();
 		type Currency = balances::Module<Test>;
-		type ClaimSecondsPerExp = ClaimSecondsPerExp;
-		type ClaimCurrencyPerSecond = ClaimCurrencyPerSecond;
-		type ClaimSecondsMax = ClaimSecondsMax;
-		type CaptureKittyCost = CaptureKittyCost;
 	}
 	type OwnedKittiesTest = OwnedKitties<Test>;
 
