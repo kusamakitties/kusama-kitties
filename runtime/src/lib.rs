@@ -206,6 +206,7 @@ parameter_types! {
 	pub const ClaimSecondsPerExp: u64 = 1000 * 10; // 10s
 	pub const ClaimCurrencyPerSecond: Balance = DOLLAR / 1000 / 2000; // $1 per 2000s
 	pub const ClaimSecondsMax: u64 = 1000 * 60 * 60 * 24 * 7; // 7days
+	pub const CaptureKittyCost: Balance = DOLLAR * 50; // $1 per 2000s
 }
 
 impl kitties::Trait for Runtime {
@@ -214,6 +215,7 @@ impl kitties::Trait for Runtime {
 	type ClaimSecondsPerExp = ClaimSecondsPerExp;
 	type ClaimCurrencyPerSecond = ClaimCurrencyPerSecond;
 	type ClaimSecondsMax = ClaimSecondsMax;
+	type CaptureKittyCost = CaptureKittyCost;
 }
 
 construct_runtime!(
