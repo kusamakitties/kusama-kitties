@@ -200,20 +200,9 @@ impl sudo::Trait for Runtime {
 	type Proposal = Call;
 }
 
-const DOLLAR: Balance = 1_000_000_000_000;
-
-parameter_types! {
-	pub const ClaimSecondsPerExp: u64 = 1000 * 10; // 10s
-	pub const ClaimCurrencyPerSecond: Balance = DOLLAR / 1000 / 2000; // $1 per 2000s
-	pub const ClaimSecondsMax: u64 = 1000 * 60 * 60 * 24 * 7; // 7days
-}
-
 impl kitties::Trait for Runtime {
 	type Event = Event;
 	type Currency = Balances;
-	type ClaimSecondsPerExp = ClaimSecondsPerExp;
-	type ClaimCurrencyPerSecond = ClaimCurrencyPerSecond;
-	type ClaimSecondsMax = ClaimSecondsMax;
 }
 
 construct_runtime!(

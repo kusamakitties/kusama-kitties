@@ -3,8 +3,15 @@
 use rand::SeedableRng;
 use rstd::prelude::*;
 use rstd::result;
-use rstd::{cmp, convert::{TryInto, Into}};
-use support::{decl_event, decl_module, decl_storage, ensure, traits::Currency, traits::Get, StorageMap, StorageValue};
+use rstd::{
+	cmp,
+	convert::{Into, TryInto},
+};
+use support::{
+	decl_event, decl_module, decl_storage, ensure,
+	traits::{Currency, ExistenceRequirement, WithdrawReason},
+	StorageMap, StorageValue,
+};
 use system::ensure_signed;
 
 mod linked_item;
@@ -16,13 +23,11 @@ use kitty::{Kitty, KittyDetails, KittyIndex};
 mod random;
 use random::{random_seed, Rng};
 
+mod constants;
+
 pub trait Trait: timestamp::Trait {
 	type Event: From<Event<Self>> + Into<<Self as system::Trait>::Event>;
 	type Currency: Currency<Self::AccountId>;
-
-	type ClaimSecondsPerExp: Get<Self::Moment>;
-	type ClaimCurrencyPerSecond: Get<BalanceOf<Self>>;
-	type ClaimSecondsMax: Get<Self::Moment>;
 }
 
 type BalanceOf<T> = <<T as Trait>::Currency as Currency<<T as system::Trait>::AccountId>>::Balance;
@@ -77,27 +82,26 @@ decl_event!(
 
 decl_module! {
 	pub struct Module<T: Trait> for enum Call where origin: T::Origin {
-
-		const ClaimSecondsPerExp: T::Moment = T::ClaimSecondsPerExp::get();
-		const ClaimCurrencyPerSecond: BalanceOf<T> = T::ClaimCurrencyPerSecond::get();
-		const ClaimSecondsMax: T::Moment = T::ClaimSecondsMax::get();
-
 		fn deposit_event<T>() = default;
 
-		/// Create a new kitty
-		pub fn create(origin) {
+		/// Capture a wild kitty
+		pub fn capture(origin) {
 			let sender = ensure_signed(origin)?;
+			let new_kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
+
+			// pay capture cost
+			T::Currency::withdraw(&sender, Self::to_balance(constants::CAPTURE_KITTY_COST)?, WithdrawReason::Fee, ExistenceRequirement::KeepAlive)?;
 
 			// Create and store kitty
 			let kitty = Kitty::new(&mut rng::<T>(&sender));
-			let kitty_id = Self::insert_kitty(&sender, kitty)?;
+			Self::insert_kitty(&sender, new_kitty_id, kitty);
 
-			Self::deposit_event(RawEvent::Captured(sender, kitty_id));
+			Self::deposit_event(RawEvent::Captured(sender, new_kitty_id));
 		}
 
 		pub fn update_name(origin, kitty_id: KittyIndex, name: Vec<u8>) {
 			let sender = ensure_signed(origin)?;
-			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can update kitty name");
+			Self::ensure_owner(&sender, kitty_id)?;
 			ensure!(name.len() < 50, "Kitty name cannot be more than 50 bytes");
 			KittiesName::insert(kitty_id, name);
 		}
@@ -106,7 +110,22 @@ decl_module! {
 		pub fn breed(origin, kitty_id_1: KittyIndex, kitty_id_2: KittyIndex) {
 			let sender = ensure_signed(origin)?;
 
-			let new_kitty_id = Self::do_breed(&sender, kitty_id_1, kitty_id_2)?;
+			let new_kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
+
+			let new_kitty = Self::do_breed(&sender, kitty_id_1, kitty_id_2)?;
+
+			let generation_cost = constants::BREED_KITTY_COST_PER_GENERATION
+				.checked_mul(new_kitty.generation.into())
+				.ok_or("Breed cost calculation overflow")?;
+			let total_cost = constants::BREED_KITTY_BASE_COST
+				.checked_add(generation_cost)
+				.ok_or("Breed cost calculation overflow")?;
+			let total_cost = Self::to_balance(total_cost)?;
+
+			// pay breed cost
+			T::Currency::withdraw(&sender, total_cost, WithdrawReason::Fee, ExistenceRequirement::KeepAlive)?;
+
+			Self::insert_kitty(&sender, new_kitty_id, new_kitty);
 
 			Self::deposit_event(RawEvent::Born(sender, new_kitty_id));
 		}
@@ -115,7 +134,7 @@ decl_module! {
 		pub fn transfer(origin, to: T::AccountId, kitty_id: KittyIndex) {
 			let sender = ensure_signed(origin)?;
 
-			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can transfer kitty");
+			Self::ensure_owner(&sender, kitty_id)?;
 
 			Self::do_transfer(&sender, &to, kitty_id);
 
@@ -124,20 +143,20 @@ decl_module! {
 
 		pub fn claim(origin, kitty_id: KittyIndex) {
 			let sender = ensure_signed(origin)?;
-			ensure!(<OwnedKitties<T>>::exists(&(sender.clone(), Some(kitty_id))), "Only owner can claim their kitty rewards");
+			Self::ensure_owner(&sender, kitty_id)?;
 
 			// TODO: remove bunch clones when https://github.com/paritytech/substrate/pull/3476 is merged
 
 			let last_claim = Self::kitty_last_claim_time(kitty_id);
 			let now = timestamp::Module::<T>::now();
-			let time_diff = cmp::min(now.clone() - last_claim, T::ClaimSecondsMax::get());
+			let time_diff = cmp::min(now.clone() - last_claim, Self::to_moment(constants::CLAIM_SECONDS_MAX)?);
 
-			let reward_exp = time_diff.clone() / T::ClaimSecondsPerExp::get();
+			let reward_exp = time_diff.clone() / Self::to_moment(constants::CLAIM_SECONDS_PER_EXP)?;
 			let reward_exp: u32 = TryInto::<u32>::try_into(reward_exp).map_err(|_| "Reward exp overflow")?;
 			let new_exp = Self::kitty_exp(kitty_id).checked_add(reward_exp).ok_or("Kitty exp overflow")?;
 
 			let time_diff = TryInto::<u32>::try_into(time_diff).map_err(|_| "Time diff overflow")?;
-			let reward_currency = Into::<BalanceOf<T>>::into(time_diff) * T::ClaimCurrencyPerSecond::get();
+			let reward_currency = Into::<BalanceOf<T>>::into(time_diff) * Self::to_balance(constants::CLAIM_CURRENCY_PER_SECOND)?;
 			let reward_currency: BalanceOf<T> = reward_currency.into();
 
 			T::Currency::deposit_into_existing(&sender, reward_currency)?;
@@ -148,12 +167,27 @@ decl_module! {
 }
 
 impl<T: Trait> Module<T> {
+	fn to_balance(val: u128) -> result::Result<BalanceOf<T>, &'static str> {
+		val.try_into().map_err(|_| "Convert to Balance type overflow")
+	}
+
+	fn to_moment(val: u64) -> result::Result<T::Moment, &'static str> {
+		val.try_into().map_err(|_| "Convert to Moment type overflow")
+	}
+
+	fn ensure_owner(owner: &T::AccountId, kitty_id: KittyIndex) -> result::Result<(), &'static str> {
+		ensure!(
+			<OwnedKitties<T>>::exists(&(owner.clone(), Some(kitty_id))),
+			"Not owner of kitty"
+		);
+		Ok(())
+	}
+
 	fn insert_owned_kitty(owner: &T::AccountId, kitty_id: KittyIndex) {
 		<OwnedKittiesList<T>>::append(owner, kitty_id);
 	}
 
-	fn insert_kitty(owner: &T::AccountId, kitty: Kitty<T>) -> result::Result<KittyIndex, &'static str> {
-		let kitty_id = Self::next_kitty_index().ok_or("Kitties count overflow")?;
+	fn insert_kitty(owner: &T::AccountId, kitty_id: KittyIndex, kitty: Kitty<T>) {
 		// Create and store kitty
 		<Kitties<T>>::insert(kitty_id, kitty);
 		if let Some(next_id) = kitty_id.next_index() {
@@ -166,15 +200,13 @@ impl<T: Trait> Module<T> {
 		<KittiesLastClaimTime<T>>::insert(kitty_id, timestamp::Module::<T>::now());
 
 		Self::insert_owned_kitty(owner, kitty_id);
-
-		Ok(kitty_id)
 	}
 
 	fn do_breed(
 		sender: &T::AccountId,
 		kitty_id_1: KittyIndex,
 		kitty_id_2: KittyIndex,
-	) -> result::Result<KittyIndex, &'static str> {
+	) -> result::Result<Kitty<T>, &'static str> {
 		ensure!(kitty_id_1 != kitty_id_2, "Needs different parent");
 		ensure!(
 			Self::kitty_owner(&kitty_id_1)
@@ -193,9 +225,7 @@ impl<T: Trait> Module<T> {
 		let mut parent2 = KittyDetails::from(kitty_id_2).ok_or("Invalid kitty_id_2")?;
 		let new_kitty = Kitty::from_parents(&mut parent1, &mut parent2, &mut rng::<T>(&sender))?;
 
-		let kitty_id = Self::insert_kitty(sender, new_kitty)?;
-
-		Ok(kitty_id)
+		Ok(new_kitty)
 	}
 
 	fn do_transfer(from: &T::AccountId, to: &T::AccountId, kitty_id: KittyIndex) {
@@ -282,18 +312,9 @@ mod tests {
 		type MinimumPeriod = MinimumPeriod;
 	}
 
-	parameter_types! {
-		pub const ClaimSecondsPerExp: u64 = 50; // 10s
-		pub const ClaimCurrencyPerSecond: u64 = 10; // $1 per 2000s
-		pub const ClaimSecondsMax: u64 = 100;
-	}
-
 	impl Trait for Test {
 		type Event = ();
 		type Currency = balances::Module<Test>;
-		type ClaimSecondsPerExp = ClaimSecondsPerExp;
-		type ClaimCurrencyPerSecond = ClaimCurrencyPerSecond;
-		type ClaimSecondsMax = ClaimSecondsMax;
 	}
 	type OwnedKittiesTest = OwnedKitties<Test>;
 
