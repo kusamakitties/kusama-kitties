@@ -15,16 +15,18 @@ support = { package = "srml-support", git = "https://github.com/paritytech/subst
 primitives = { package = "substrate-primitives", git = "https://github.com/paritytech/substrate.git", default-features = false }
 substrate-session = { git = "https://github.com/paritytech/substrate.git", default-features = false }
 balances = { package = "srml-balances", git = "https://github.com/paritytech/substrate.git", default-features = false }
-aura = { package = "srml-aura", git = "https://github.com/paritytech/substrate.git", default-features = false }
+babe = { package = "srml-babe", git = "https://github.com/paritytech/substrate.git", default-features = false }
+babe-primitives = { package = "substrate-consensus-babe-primitives", git = "https://github.com/paritytech/substrate.git", default-features = false }
 executive = { package = "srml-executive", git = "https://github.com/paritytech/substrate.git", default-features = false }
 indices = { package = "srml-indices", git = "https://github.com/paritytech/substrate.git", default-features = false }
+grandpa = { package = "srml-grandpa", git = "https://github.com/paritytech/substrate.git", default-features = false }
 system = { package = "srml-system", git = "https://github.com/paritytech/substrate.git", default-features = false }
 timestamp = { package = "srml-timestamp", git = "https://github.com/paritytech/substrate.git", default-features = false }
 sudo = { package = "srml-sudo", git = "https://github.com/paritytech/substrate.git", default-features = false }
 sr-primitives = { git = "https://github.com/paritytech/substrate.git", default-features = false }
 client = { package = "substrate-client", git = "https://github.com/paritytech/substrate.git", default-features = false }
-consensus-aura = { package = "substrate-consensus-aura-primitives", git = "https://github.com/paritytech/substrate.git", default-features = false }
 offchain-primitives = { package = "substrate-offchain-primitives", git = "https://github.com/paritytech/substrate.git", default-features = false }
+
 kitties = { package = "kkrml-kitties", path = "../kkrml/kitties", default-features = false }
 
 [build-dependencies]
@@ -34,25 +36,26 @@ wasm-builder-runner = { package = "substrate-wasm-builder-runner", version = "1.
 default = ["std"]
 no_std = []
 std = [
-    "codec/std",
-    "client/std",
-    "rstd/std",
-    "runtime-io/std",
-    "support/std",
-    "balances/std",
-    "executive/std",
-    "aura/std",
-    "indices/std",
-    "primitives/std",
-    "sr-primitives/std",
-    "system/std",
-    "timestamp/std",
-    "sudo/std",
-    "version/std",
-    "serde",
-    "safe-mix/std",
-    "consensus-aura/std",
-    "offchain-primitives/std",
-    "substrate-session/std",
+	"codec/std",
+	"client/std",
+	"rstd/std",
+	"runtime-io/std",
+	"support/std",
+	"balances/std",
+	"babe/std",
+	"babe-primitives/std",
+	"executive/std",
+	"indices/std",
+	"grandpa/std",
+	"primitives/std",
+	"sr-primitives/std",
+	"system/std",
+	"timestamp/std",
+	"sudo/std",
+	"version/std",
+	"serde",
+	"safe-mix/std",
+	"offchain-primitives/std",
+	"substrate-session/std",
     "kitties/std",
 ]
